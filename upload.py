@@ -5,6 +5,7 @@ import PyPDF2
 import re
 import json
 
+limit = 500 # Maximum length of text to be appended
 # Function to convert PDF to text and append to vault.txt
 def convert_pdf_to_text():
     file_path = filedialog.askopenfilename(filetypes=[("PDF Files", "*.pdf")])
@@ -27,10 +28,10 @@ def convert_pdf_to_text():
             current_chunk = ""
             for sentence in sentences:
                 # Check if the current sentence plus the current chunk exceeds the limit
-                if len(current_chunk) + len(sentence) + 1 < 1000:  # +1 for the space
+                if len(current_chunk) + len(sentence) + 1 < limit:  # +1 for the space
                     current_chunk += (sentence + " ").strip()
                 else:
-                    # When the chunk exceeds 1000 characters, store it and start a new one
+                    # When the chunk exceeds limit characters, store it and start a new one
                     chunks.append(current_chunk)
                     current_chunk = sentence + " "
             if current_chunk:  # Don't forget the last chunk!
@@ -57,10 +58,10 @@ def upload_txtfile():
             current_chunk = ""
             for sentence in sentences:
                 # Check if the current sentence plus the current chunk exceeds the limit
-                if len(current_chunk) + len(sentence) + 1 < 1000:  # +1 for the space
+                if len(current_chunk) + len(sentence) + 1 < limit:  # +1 for the space
                     current_chunk += (sentence + " ").strip()
                 else:
-                    # When the chunk exceeds 1000 characters, store it and start a new one
+                    # When the chunk exceeds limit characters, store it and start a new one
                     chunks.append(current_chunk)
                     current_chunk = sentence + " "
             if current_chunk:  # Don't forget the last chunk!
@@ -90,10 +91,10 @@ def upload_jsonfile():
             current_chunk = ""
             for sentence in sentences:
                 # Check if the current sentence plus the current chunk exceeds the limit
-                if len(current_chunk) + len(sentence) + 1 < 1000:  # +1 for the space
+                if len(current_chunk) + len(sentence) + 1 < limit:  # +1 for the space
                     current_chunk += (sentence + " ").strip()
                 else:
-                    # When the chunk exceeds 1000 characters, store it and start a new one
+                    # When the chunk exceeds limit characters, store it and start a new one
                     chunks.append(current_chunk)
                     current_chunk = sentence + " "
             if current_chunk:  # Don't forget the last chunk!

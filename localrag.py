@@ -4,6 +4,7 @@ import os
 from openai import OpenAI
 import argparse
 import json
+import pickle
 
 # ANSI escape codes for colors
 PINK = '\033[95m'
@@ -12,13 +13,31 @@ YELLOW = '\033[93m'
 NEON_GREEN = '\033[92m'
 RESET_COLOR = '\033[0m'
 
+def save_embeddings_to_file(embeddings, filename):
+    """Saves embeddings to a pickle file."""
+    with open(filename, 'wb') as f:
+        pickle.dump(embeddings, f)
+
+def load_embeddings_from_file(filename):
+    """Loads embeddings from a pickle file."""
+    try:
+        with open(filename, 'rb') as f:
+            embeddings = pickle.load(f)
+            return embeddings
+    except FileNotFoundError:
+        print(f"Error: Embeddings file '{filename}' not found.")
+        return None
+    except Exception as e:
+        print(f"Error loading embeddings: {e}")
+        return None
+
 # Function to open a file and return its contents as a string
 def open_file(filepath):
     with open(filepath, 'r', encoding='utf-8') as infile:
         return infile.read()
 
 # Function to get relevant context from the vault based on user input
-def get_relevant_context(rewritten_input, vault_embeddings, vault_content, top_k=3):
+def get_relevant_context(rewritten_input, vault_embeddings, vault_content, top_k=5):
     if vault_embeddings.nelement() == 0:  # Check if the tensor has any elements
         return []
     # Encode the rewritten input
@@ -37,26 +56,15 @@ def rewrite_query(user_input_json, conversation_history, ollama_model):
     user_input = json.loads(user_input_json)["Query"]
     context = "\n".join([f"{msg['role']}: {msg['content']}" for msg in conversation_history[-2:]])
     prompt = f"""Rewrite the following query by incorporating relevant context from the conversation history.
-    The rewritten query should:
-    
-    - Preserve the core intent and meaning of the original query
-    - Expand and clarify the query to make it more specific and informative for retrieving relevant context
-    - Avoid introducing new topics or queries that deviate from the original query
-    - DONT EVER ANSWER the Original query, but instead focus on rephrasing and expanding it into a new query
-    
-    Return ONLY the rewritten query text, without any additional formatting or explanations.
-    
     Conversation History:
     {context}
     
     Original query: [{user_input}]
-    
-    Rewritten query: 
     """
     response = client.chat.completions.create(
         model=ollama_model,
         messages=[{"role": "system", "content": prompt}],
-        max_tokens=200,
+        max_tokens=2000,
         n=1,
         temperature=0.1,
     )
@@ -110,30 +118,39 @@ def ollama_chat(user_input, system_message, vault_embeddings, vault_content, oll
 # Parse command-line arguments
 print(NEON_GREEN + "Parsing command-line arguments..." + RESET_COLOR)
 parser = argparse.ArgumentParser(description="Ollama Chat")
-parser.add_argument("--model", default="llama3", help="Ollama model to use (default: llama3)")
+parser.add_argument("--model", default="llama3.1", help="Ollama model to use (default: llama3)")
 args = parser.parse_args()
+
 
 # Configuration for the Ollama API client
 print(NEON_GREEN + "Initializing Ollama API client..." + RESET_COLOR)
 client = OpenAI(
-    base_url='http://localhost:11434/v1',
-    api_key='llama3'
+    base_url='http://pclouderae02:8080/v1',
+    api_key='llama3.1'
 )
 
+vault_path = "vault.txt"  # Or whatever your vault file path is
+embeddings_path = "vault.pickle" # Or whatever your embeddings file path is
 # Load the vault content
 print(NEON_GREEN + "Loading vault content..." + RESET_COLOR)
 vault_content = []
-if os.path.exists("vault.txt"):
-    with open("vault.txt", "r", encoding='utf-8') as vault_file:
+if os.path.exists(vault_path):
+    with open(vault_path, "r", encoding='utf-8') as vault_file:
         vault_content = vault_file.readlines()
 
 # Generate embeddings for the vault content using Ollama
-print(NEON_GREEN + "Generating embeddings for the vault content..." + RESET_COLOR)
-vault_embeddings = []
-for content in vault_content:
-    response = ollama.embeddings(model='mxbai-embed-large', prompt=content)
-    vault_embeddings.append(response["embedding"])
-
+if os.path.exists(embeddings_path) and os.path.getmtime(embeddings_path) > os.path.getmtime(vault_path):
+    print(f"Loading embeddings from '{embeddings_path}'...")
+    vault_embeddings = load_embeddings_from_file(embeddings_path)
+else:
+    print(NEON_GREEN + "Generating embeddings for the vault content..." + RESET_COLOR)
+    vault_embeddings = []
+    for content in vault_content:
+        print('.', end='', flush=True)
+        response = ollama.embeddings(model='mxbai-embed-large', prompt=content)
+        vault_embeddings.append(response["embedding"])
+    save_embeddings_to_file(vault_embeddings, embeddings_path)
+                        
 # Convert to tensor and print embeddings
 print("Converting embeddings to tensor...")
 vault_embeddings_tensor = torch.tensor(vault_embeddings) 

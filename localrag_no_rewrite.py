@@ -3,6 +3,7 @@ import ollama
 import os
 from openai import OpenAI
 import argparse
+import pickle
 
 # ANSI escape codes for colors
 PINK = '\033[95m'
@@ -10,6 +11,24 @@ CYAN = '\033[96m'
 YELLOW = '\033[93m'
 NEON_GREEN = '\033[92m'
 RESET_COLOR = '\033[0m'
+
+def save_embeddings_to_file(embeddings, filename):
+    """Saves embeddings to a pickle file."""
+    with open(filename, 'wb') as f:
+        pickle.dump(embeddings, f)
+
+def load_embeddings_from_file(filename):
+    """Loads embeddings from a pickle file."""
+    try:
+        with open(filename, 'rb') as f:
+            embeddings = pickle.load(f)
+            return embeddings
+    except FileNotFoundError:
+        print(f"Error: Embeddings file '{filename}' not found.")
+        return None
+    except Exception as e:
+        print(f"Error loading embeddings: {e}")
+        return None
 
 # Function to open a file and return its contents as a string
 def open_file(filepath):
@@ -35,7 +54,7 @@ def get_relevant_context(rewritten_input, vault_embeddings, vault_content, top_k
 # Function to interact with the Ollama model
 def ollama_chat(user_input, system_message, vault_embeddings, vault_content, ollama_model, conversation_history):
     # Get relevant context from the vault
-    relevant_context = get_relevant_context(user_input, vault_embeddings_tensor, vault_content, top_k=3)
+    relevant_context = get_relevant_context(user_input, vault_embeddings_tensor, vault_content, top_k=6)
     if relevant_context:
         # Convert list to a single string with newlines between items
         context_str = "\n".join(relevant_context)
@@ -71,26 +90,37 @@ def ollama_chat(user_input, system_message, vault_embeddings, vault_content, oll
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Ollama Chat")
-parser.add_argument("--model", default="dolphin-llama3", help="Ollama model to use (default: llama3)")
+parser.add_argument("--model", default="llama3.1", help="Ollama model to use (default: llama3.1)")
 args = parser.parse_args()
 
 # Configuration for the Ollama API client
 client = OpenAI(
-    base_url='http://localhost:11434/v1',
-    api_key='dolphin-llama3'
+    #base_url='http://192.168.1.60:11434/v1',
+    base_url='http://pclouderae02:8080/v1',
+    api_key='llama3.2'
 )
 
+vault_path = "vault.txt"  # Or whatever your vault file path is
+embeddings_path = "vault.pickle" # Or whatever your embeddings file path is
 # Load the vault content
+print(NEON_GREEN + "Loading vault content..." + RESET_COLOR)
 vault_content = []
-if os.path.exists("vault.txt"):
-    with open("vault.txt", "r", encoding='utf-8') as vault_file:
+if os.path.exists(vault_path):
+    with open(vault_path, "r", encoding='utf-8') as vault_file:
         vault_content = vault_file.readlines()
 
 # Generate embeddings for the vault content using Ollama
-vault_embeddings = []
-for content in vault_content:
-    response = ollama.embeddings(model='mxbai-embed-large', prompt=content)
-    vault_embeddings.append(response["embedding"])
+if os.path.exists(embeddings_path) and os.path.getmtime(embeddings_path) > os.path.getmtime(vault_path):
+    print(f"Loading embeddings from '{embeddings_path}'...")
+    vault_embeddings = load_embeddings_from_file(embeddings_path)
+else:
+    print(NEON_GREEN + "Generating embeddings for the vault content..." + RESET_COLOR)
+    vault_embeddings = []
+    for content in vault_content:
+        print('.', end='', flush=True)
+        response = ollama.embeddings(model='mxbai-embed-large', prompt=content)
+        vault_embeddings.append(response["embedding"])
+    save_embeddings_to_file(vault_embeddings, embeddings_path)
 
 # Convert to tensor and print embeddings
 vault_embeddings_tensor = torch.tensor(vault_embeddings) 
